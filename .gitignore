@@ -1,0 +1,7 @@
+*.yaml
+*.exe
+log/
+*.txt
+*.json
+*.design
+*.xlsx
