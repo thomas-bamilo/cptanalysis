@@ -1,4 +1,5 @@
-﻿-- last snapshot view
+﻿-- DGK
+-- last snapshot view
 CREATE VIEW commercial.cpt_dgk_config_last_snapshot_view AS
 SELECT 
   
@@ -71,5 +72,58 @@ WHERE cdchv.config_snapshot_at > DATEADD(DAY,-3,GETDATE())
 AND cdchv.id_dgk_catalog_config = 3
 
 
+-- BML
 
-      
+
+-- history view
+CREATE VIEW commercial.cpt_bml_config_hist_view AS
+SELECT 
+  cdcch.fk_bml_catalog_config
+  ,cdcc.sku_name
+  ,cdcc.img_link
+  ,cdcc.bi_category_one_name
+
+  ,cdcch.config_snapshot_at
+  ,cdcch.visible_in_shop
+  ,cdcch.avg_price
+  ,cdcch.avg_special_price
+  ,cdcch.sum_of_stock_quantity
+  ,cdcch.min_of_stock_quantity
+
+  ,cdcch.sum_of_unit_price
+  ,cdcch.sum_of_paid_price
+  ,cdcch.sum_of_coupon_money_value
+  ,cdcch.sum_of_cart_rule_discount  
+  
+FROM commercial.cpt_bml_catalog_config cdcc
+
+JOIN commercial.cpt_bml_catalog_config_hist cdcch
+
+ON  cdcch.fk_bml_catalog_config = cdcc.id_bml_catalog_config;
+
+SELECT * FROM commercial.cpt_bml_config_hist_view cbchv
+WHERE cbchv.fk_bml_catalog_config = 184747
+ -- AND  cbchv.config_snapshot_at = '6/26/2018'
+ 
+
+
+  	SELECT
+
+		cc.id_catalog_config
+		,soi.created_at config_snapshot_at
+
+		,COUNT(DISTINCT soi.id_sales_order_item) count_of_soi
+		,SUM(soi.paid_price) sum_of_paid_price
+		,SUM(soi.unit_price) sum_of_unit_price
+		,SUM(soi.coupon_money_value) sum_of_coupon_money_value
+		,SUM(soi.cart_rule_discount) sum_of_cart_rule_discount
+	
+		FROM sales_order_item soi
+		JOIN catalog_simple cs
+		ON soi.sku = cs.sku
+		JOIN catalog_config cc
+		ON cs.fk_catalog_config = cc.id_catalog_config
+	
+		WHERE CAST(soi.created_at AS DATE) >= CAST(NOW()-INTERVAL 3 DAY AS DATE)
+	
+		GROUP BY cc.id_catalog_config, CAST(soi.created_at AS DATE);

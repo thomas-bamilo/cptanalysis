@@ -3,27 +3,37 @@ package baainteract
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	"github.com/thomas-bamilo/commercial/competitionanalysis/bamilocatalogconfig"
 )
 
-func AddBamiloCatalogConfigToBaa(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogconfig.BamiloCatalogConfig) {
+// could speed up by selecting this beforehand for re-use: SELECT CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''));
 
-	// if id_bml_catalog_config does not exist in cpt_bml_catalog_config
-	// then create the new config in cpt_bml_catalog_config
-	// and record the first historical data in cpt_bml_catalog_config_hist
-	if isConfigExist(dbBaa, bamiloCatalogConfig) {
+func AddBamiloCatalogConfigTableToBaa(dbBaa *sql.DB, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
 
-		createConfigRecordHistory(dbBaa, bamiloCatalogConfig)
+	for _, bamiloCatalogConfig := range bamiloCatalogConfigTable {
+		// if id_bml_catalog_config does not exist in cpt_bml_catalog_config
+		// then create the new config in cpt_bml_catalog_config
+		// and record the first historical data in cpt_bml_catalog_config_hist
+		if !isConfigExist(dbBaa, bamiloCatalogConfig) {
 
-	} else {
+			createConfigRecordHistory(dbBaa, bamiloCatalogConfig)
 
-		// else update the existing config in cpt_bml_catalog_config
-		// and if historical data has already been recorded today
-		// then update historical data in cpt_bml_catalog_config_hist
-		// else record new historical data in cpt_bml_catalog_config_hist
-		updateConfigRecordHistory(dbBaa, bamiloCatalogConfig)
+		} else {
+
+			// else update the existing config in cpt_bml_catalog_config
+			// and if historical data has already been recorded today
+			// then update historical data in cpt_bml_catalog_config_hist
+			// else record new historical data in cpt_bml_catalog_config_hist
+			updateConfigRecordHistory(dbBaa, bamiloCatalogConfig)
+		}
 	}
+
+	end := time.Now()
+	log.Println(`End time SQL: ` + end.Format(`1 January 2006, 15:04:05`))
+	duration := time.Since(start)
+	log.Print(`Time elapsed SQL: `, duration.Minutes(), ` minutes`)
 }
 
 // check if the config already exists in cpt_bml_catalog_config
@@ -64,11 +74,10 @@ func isConfigHistExist(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogconfig.Ba
 	query := `
 	SELECT 
 
-	cbcch.fk_bml_catalog_config
+	cbchv.id_bml_catalog_config_hist
 
-	FROM baa_application.commercial.cpt_bml_catalog_config_hist cbcch
-	WHERE cbcch.fk_bml_catalog_config = @p1
-	AND cbcch.config_snapshot_at = CONVERT(DATE,GETDATE())
+	FROM baa_application.commercial.cpt_bml_config_hist_view cbchv
+	WHERE cbchv.id_bml_catalog_config_hist = CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''))
 	`
 
 	err := dbBaa.QueryRow(query, bamiloCatalogConfig.IDBmlCatalogConfig).Scan(&test)
@@ -115,21 +124,16 @@ func createConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14,@p15);
 		
 		INSERT INTO baa_application.commercial.cpt_bml_catalog_config_hist (
-			fk_bml_catalog_config
+			id_bml_catalog_config_hist
+			,fk_bml_catalog_config
 
 			,visible_in_shop
 
 			,avg_price 
 			,avg_special_price 
 			,sum_of_stock_quantity 
-			,min_of_stock_quantity 
-		  
-			,count_of_soi 
-			,sum_of_unit_price 
-			,sum_of_paid_price 
-			,sum_of_coupon_money_value 
-			,sum_of_cart_rule_discount ) 
-		VALUES (@p1,@p16,@p17,@p18,@p19,@p20,@p21,@p22,@p23,@p24,@p25);
+			,min_of_stock_quantity) 
+		VALUES (CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/','')),@p1,@p16,@p17,@p18,@p19,@p20);
 		`
 	createConfigRecordHistory, err := dbBaa.Prepare(createConfigRecordHistoryStr)
 	defer createConfigRecordHistory.Close()
@@ -162,12 +166,6 @@ func createConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 		bamiloCatalogConfig.AvgSpecialPrice,
 		bamiloCatalogConfig.SumOfStockQuantity,
 		bamiloCatalogConfig.MinOfStockQuantity,
-
-		bamiloCatalogConfig.CountOfSoi,
-		bamiloCatalogConfig.SumOfUnitPrice,
-		bamiloCatalogConfig.SumOfPaidPrice,
-		bamiloCatalogConfig.SumOfCouponMoneyValue,
-		bamiloCatalogConfig.SumOfCartRuleDiscount,
 	)
 	checkError(err)
 
@@ -183,7 +181,9 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 	updateConfigRecordHistoryStr1 := `
 	UPDATE baa_application.commercial.cpt_bml_catalog_config
 				SET 
-				sku_name = @p1
+				config_updated_at = GETDATE()
+
+				,sku_name = @p1
 				,img_link = @p2
 				,description  = @p3
 				,short_description  = @p4
@@ -200,7 +200,7 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 				,supplier_name  = @p12
 				,supplier_name_en = @p13
 	
-	WHERE id_bml_catalog_config = @p14);
+	WHERE id_bml_catalog_config = @p14;
 		`
 	updateConfigRecordHistory1, err := dbBaa.Prepare(updateConfigRecordHistoryStr1)
 	defer updateConfigRecordHistory1.Close()
@@ -242,15 +242,8 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 					,avg_special_price = @p4
 					,sum_of_stock_quantity = @p5
 					,min_of_stock_quantity = @p6
-				  
-					,count_of_soi = @p7
-					,sum_of_unit_price = @p8
-					,sum_of_paid_price = @p9
-					,sum_of_coupon_money_value = @p10
-					,sum_of_cart_rule_discount= @p11
 		
-		WHERE fk_bml_catalog_config = @p1
-		AND config_snapshot_at = CONVERT(DATE,GETDATE());
+		WHERE id_bml_catalog_config_hist = CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''));
 		`
 		updateConfigRecordHistory2, err := dbBaa.Prepare(updateConfigRecordHistoryStr2)
 		defer updateConfigRecordHistory2.Close()
@@ -266,12 +259,6 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 			bamiloCatalogConfig.AvgSpecialPrice,
 			bamiloCatalogConfig.SumOfStockQuantity,
 			bamiloCatalogConfig.MinOfStockQuantity,
-
-			bamiloCatalogConfig.CountOfSoi,
-			bamiloCatalogConfig.SumOfUnitPrice,
-			bamiloCatalogConfig.SumOfPaidPrice,
-			bamiloCatalogConfig.SumOfCouponMoneyValue,
-			bamiloCatalogConfig.SumOfCartRuleDiscount,
 		)
 		checkError(err)
 
@@ -280,21 +267,17 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 		// prepare statement
 		updateConfigRecordHistoryStr3 := `
 		INSERT INTO baa_application.commercial.cpt_bml_catalog_config_hist (
-			fk_bml_catalog_config
+			
+			id_bml_catalog_config_hist
+			,fk_bml_catalog_config
 
 			,visible_in_shop
 
 			,avg_price 
 			,avg_special_price 
 			,sum_of_stock_quantity 
-			,min_of_stock_quantity 
-		
-			,count_of_soi 
-			,sum_of_unit_price 
-			,sum_of_paid_price 
-			,sum_of_coupon_money_value 
-			,sum_of_cart_rule_discount ) 
-		VALUES (@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11);
+			,min_of_stock_quantity) 
+		VALUES (CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/','')),@p1,@p2,@p3,@p4,@p5,@p6);
 `
 		updateConfigRecordHistory3, err := dbBaa.Prepare(updateConfigRecordHistoryStr3)
 		defer updateConfigRecordHistory3.Close()
@@ -319,6 +302,61 @@ func updateConfigRecordHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogc
 		)
 		checkError(err)
 	}
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// Update sales historical data
+
+func UpdateBamiloCatalogConfigSales(dbBaa *sql.DB, bamiloCatalogConfigSalesTable []bamilocatalogconfig.BamiloCatalogConfig) {
+
+	for _, bamiloCatalogConfigSales := range bamiloCatalogConfigSalesTable {
+		// if config historical data exists (and it always should)
+		// then update historical sales data in cpt_bml_catalog_config_hist
+		if isConfigHistExist(dbBaa, bamiloCatalogConfigSales) {
+
+			log.Println(`Updated`, bamiloCatalogConfigSales.IDBmlCatalogConfig, bamiloCatalogConfigSales.ConfigSnapshotAt)
+			updateConfigSalesHistory(dbBaa, bamiloCatalogConfigSales)
+
+		} else {
+
+			log.Println(`Not updated`, bamiloCatalogConfigSales.IDBmlCatalogConfig, bamiloCatalogConfigSales.ConfigSnapshotAt)
+
+		}
+	}
+
+}
+
+func updateConfigSalesHistory(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogconfig.BamiloCatalogConfig) {
+
+	// prepare statement
+	updateConfigSalesHistoryStr := `
+	UPDATE baa_application.commercial.cpt_bml_catalog_config_hist
+			SET 	
+				count_of_soi = @p3
+				,sum_of_paid_price = @p4
+				,sum_of_unit_price = @p5
+				,sum_of_coupon_money_value = @p6
+				,sum_of_cart_rule_discount = @p7
+	
+	WHERE id_bml_catalog_config_hist = CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''));
+	`
+	updateConfigSalesHistory, err := dbBaa.Prepare(updateConfigSalesHistoryStr)
+	defer updateConfigSalesHistory.Close()
+	checkError(err)
+
+	// execute update
+	_, err = updateConfigSalesHistory.Exec(
+		bamiloCatalogConfig.IDBmlCatalogConfig,
+		bamiloCatalogConfig.ConfigSnapshotAt,
+
+		bamiloCatalogConfig.CountOfSoi,
+		bamiloCatalogConfig.SumOfPaidPrice,
+		bamiloCatalogConfig.SumOfUnitPrice,
+		bamiloCatalogConfig.SumOfCouponMoneyValue,
+		bamiloCatalogConfig.SumOfCartRuleDiscount,
+	)
+	checkError(err)
+
 }
 
 func checkError(err error) {

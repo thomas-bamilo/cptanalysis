@@ -1,13 +1,13 @@
 package main
 
 import (
-	"context"
 	"log"
 	"time"
 
-	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/bobinteract"
 	"github.com/thomas-bamilo/sql/connectdb"
-	elastic "gopkg.in/olivere/elastic.v5"
+
+	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/baainteract"
+	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/bobinteract"
 )
 
 func main() {
@@ -15,17 +15,13 @@ func main() {
 	start := time.Now()
 	log.Println(`Start time: ` + start.Format(`1 January 2006, 15:04:05`))
 
-	elasticClient, err := elastic.NewClient(elastic.SetURL("http://localhost:9200"))
-	checkError(err)
-	ctx := context.Background()
-
 	dbBob := connectdb.ConnectToBob()
 	defer dbBob.Close()
+	bamiloCatalogConfigSalesTable := bobinteract.GetBamiloCatalogConfigSalesTable(dbBob)
 
 	dbBaa := connectdb.ConnectToBaa()
 	defer dbBaa.Close()
-
-	bobinteract.BamiloCatalogConfigFromBobToElasticAndBaa(dbBob, elasticClient, dbBaa, ctx)
+	baainteract.UpdateBamiloCatalogConfigSales(dbBaa, bamiloCatalogConfigSalesTable)
 
 	end := time.Now()
 	log.Println(`End time: ` + end.Format(`1 January 2006, 15:04:05`))
