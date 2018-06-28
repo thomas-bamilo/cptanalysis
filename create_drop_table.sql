@@ -31,7 +31,8 @@ CREATE CLUSTERED COLUMNSTORE INDEX dgk_catalog_config_hist_cci ON baa_applicatio
 
 CREATE UNIQUE INDEX dgk_catalog_config_hist_unique_nci ON baa_application.commercial.cpt_dgk_catalog_config_hist(id_dgk_catalog_config_hist);
 
-
+DELETE FROM baa_application.commercial.cpt_dgk_catalog_config_hist
+  DELETE FROM baa_application.commercial.cpt_dgk_catalog_config
 
   -- BAMILO TABLES
 

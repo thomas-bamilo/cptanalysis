@@ -47,7 +47,7 @@ func isConfigExist(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogconfig.Bamilo
 	cbcc.id_bml_catalog_config
 
 	FROM baa_application.commercial.cpt_bml_catalog_config cbcc
-	WHERE cbcc.id_bml_catalog_config = @p1
+	WHERE cbcc.id_bml_catalog_config = @p1;
 	`
 
 	err := dbBaa.QueryRow(query, bamiloCatalogConfig.IDBmlCatalogConfig).Scan(&test)
@@ -77,7 +77,7 @@ func isConfigHistExist(dbBaa *sql.DB, bamiloCatalogConfig bamilocatalogconfig.Ba
 	cbchv.id_bml_catalog_config_hist
 
 	FROM baa_application.commercial.cpt_bml_config_hist_view cbchv
-	WHERE cbchv.id_bml_catalog_config_hist = CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''))
+	WHERE cbchv.id_bml_catalog_config_hist = CONCAT(@p1, REPLACE(CONVERT (CHAR(10), GETDATE(), 101),'/',''));
 	`
 
 	err := dbBaa.QueryRow(query, bamiloCatalogConfig.IDBmlCatalogConfig).Scan(&test)

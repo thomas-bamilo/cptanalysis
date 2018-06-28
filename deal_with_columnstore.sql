@@ -40,7 +40,8 @@ AND last_snapshot.rk = 1;
 -- history view
 CREATE VIEW commercial.cpt_dgk_config_hist_view AS
 SELECT 
-  cdcch.fk_dgk_catalog_config
+  cdcch.id_dgk_catalog_config_hist
+  ,cdcch.fk_dgk_catalog_config
   ,cdcc.sku_name
   ,cdcc.img_link
   ,cdcc.sku_rank
@@ -105,6 +106,7 @@ SELECT * FROM commercial.cpt_bml_config_hist_view cbchv
 WHERE cbchv.fk_bml_catalog_config = 184747
  -- AND  cbchv.config_snapshot_at = '6/26/2018'
  
+
 
 
   	SELECT
