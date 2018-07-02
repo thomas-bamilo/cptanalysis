@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/baainteract"
+	"github.com/globalsign/mgo"
 	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/bobinteract"
 	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/elasticinteract"
+	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/mongointeract"
 	"github.com/thomas-bamilo/sql/connectdb"
 	elastic "gopkg.in/olivere/elastic.v5"
 )
@@ -22,20 +23,26 @@ func main() {
 	defer dbBob.Close()
 	bamiloCatalogConfigTable := bobinteract.GetBamiloCatalogConfigTable(dbBob)
 
-	dbBaa := connectdb.ConnectToBaa()
-	defer dbBaa.Close()
+	// Connection URL
+	var url = `mongodb://localhost:27017/competition_analysis`
+	mongoSession, err := mgo.Dial(url)
+	checkError(err)
+	defer mongoSession.Close()
 
 	elasticClient, err := elastic.NewClient(elastic.SetURL("http://localhost:9200"))
 	checkError(err)
 	ctx := context.Background()
+
 	// wg allows the program to wait for both goroutines to execute before ending
 	// otherwise, the program will end before any goroutine can finish!
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 
-	go baainteract.AddBamiloCatalogConfigTableToBaa(dbBaa, bamiloCatalogConfigTable, start)
+	go mongointeract.UpsertConfigInfo(mongoSession, bamiloCatalogConfigTable, start)
 
-	go elasticinteract.AddBamiloCatalogConfigTableToIndex(elasticClient, ctx, bamiloCatalogConfigTable, start)
+	go mongointeract.UpsertConfigHistory(mongoSession, bamiloCatalogConfigTable, start)
+
+	go elasticinteract.UpsertConfigInfo(elasticClient, ctx, bamiloCatalogConfigTable, start)
 
 	wg.Wait()
 

@@ -10,7 +10,7 @@ import (
 	"gopkg.in/olivere/elastic.v5"
 )
 
-func AddBamiloCatalogConfigTableToIndex(elasticClient *elastic.Client, ctx context.Context, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
+func UpsertConfigInfo(elasticClient *elastic.Client, ctx context.Context, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
 
 	for _, bamiloCatalogConfig := range bamiloCatalogConfigTable {
 		// only keep appropriate information for elastic

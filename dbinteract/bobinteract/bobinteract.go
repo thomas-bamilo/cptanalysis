@@ -172,8 +172,6 @@ func GetBamiloCatalogConfigSalesTable(dbBob *sql.DB) []bamilocatalogconfig.Bamil
 		)
 		checkError(err)
 
-		log.Println(` ` + bamiloCatalogConfigSales.ConfigSnapshotAt)
-
 		bamiloCatalogConfigSalesTable = append(bamiloCatalogConfigSalesTable, bamiloCatalogConfigSales)
 
 	}
