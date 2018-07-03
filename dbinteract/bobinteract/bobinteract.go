@@ -3,7 +3,7 @@ package bobinteract
 import (
 	"database/sql"
 	"log"
-	"strconv"
+	"time"
 
 	"github.com/thomas-bamilo/commercial/competitionanalysis/bamilocatalogconfig"
 )
@@ -34,10 +34,10 @@ func GetBamiloCatalogConfigTable(dbBob *sql.DB) []bamilocatalogconfig.BamiloCata
 		,COALESCE(s.name_en,'') supplier_name_en
 -- historical data
     ,COALESCE(vccv.visible_in_shop,0)
-		,COALESCE(AVG(cs.price),0) avg_price
-		,COALESCE(AVG(cs.special_price),0) avg_special_price
-		,COALESCE(SUM(cs2.quantity),0) sum_of_stock_quantity
-    ,COALESCE(MIN(cs2.quantity),0) min_of_stock_quantity
+		,COALESCE(FLOOR(AVG(cs.price)),0) avg_price
+		,COALESCE(FLOOR(AVG(cs.special_price)),0) avg_special_price
+		,COALESCE(FLOOR(SUM(cs2.quantity)),0) sum_of_stock_quantity
+    	,COALESCE(FLOOR(MIN(cs2.quantity)),0) min_of_stock_quantity
   
 		FROM catalog_simple cs
 		JOIN catalog_config cc
@@ -124,19 +124,77 @@ func GetBamiloCatalogConfigTable(dbBob *sql.DB) []bamilocatalogconfig.BamiloCata
 
 }
 
+// GetBamiloCatalogConfigSalesTable retrieves the sum of sales data across a certain period for each SKU from BOB
 func GetBamiloCatalogConfigSalesTable(dbBob *sql.DB) []bamilocatalogconfig.BamiloCatalogConfig {
 
 	stmt, err := dbBob.Prepare(`
 		SELECT
 
 		cc.id_catalog_config
-		,DATE_FORMAT(soi.created_at, "%m/%d/%Y") config_snapshot_at
+
 		,COUNT(DISTINCT soi.id_sales_order_item) count_of_soi
+		,COALESCE(FLOOR(SUM(soi.paid_price))) sum_of_paid_price
+		,COALESCE(FLOOR(SUM(soi.unit_price))) sum_of_unit_price
+		,COALESCE(FLOOR(SUM(soi.coupon_money_value))) sum_of_coupon_money_value
+		,COALESCE(FLOOR(SUM(soi.cart_rule_discount))) sum_of_cart_rule_discount
 	
-		,SUM(soi.paid_price) sum_of_paid_price
-		,SUM(soi.unit_price) sum_of_unit_price
-		,SUM(soi.coupon_money_value) sum_of_coupon_money_value
-		,SUM(soi.cart_rule_discount) sum_of_cart_rule_discount
+		FROM sales_order_item soi
+		JOIN catalog_simple cs
+		ON soi.sku = cs.sku
+		JOIN catalog_config cc
+		ON cs.fk_catalog_config = cc.id_catalog_config
+	
+		WHERE CAST(soi.created_at AS DATE) = CAST(NOW()-INTERVAL 1 DAY AS DATE)
+	
+		GROUP BY cc.id_catalog_config;
+	 `)
+	checkError(err)
+	defer stmt.Close()
+
+	rows, err := stmt.Query()
+	checkError(err)
+	defer rows.Close()
+
+	var bamiloCatalogConfigSalesTable []bamilocatalogconfig.BamiloCatalogConfig
+	bamiloCatalogConfigSales := bamilocatalogconfig.BamiloCatalogConfig{}
+
+	for rows.Next() {
+
+		err := rows.Scan(
+			&bamiloCatalogConfigSales.IDBmlCatalogConfig,
+
+			&bamiloCatalogConfigSales.CountOfSoi,
+			&bamiloCatalogConfigSales.SumOfPaidPrice,
+			&bamiloCatalogConfigSales.SumOfUnitPrice,
+			&bamiloCatalogConfigSales.SumOfCouponMoneyValue,
+			&bamiloCatalogConfigSales.SumOfCartRuleDiscount,
+		)
+		checkError(err)
+
+		bamiloCatalogConfigSalesTable = append(bamiloCatalogConfigSalesTable, bamiloCatalogConfigSales)
+
+	}
+
+	//log.Println(` Length of the table: ` + strconv.Itoa(len(bamiloCatalogConfigSalesTable)))
+
+	return bamiloCatalogConfigSalesTable
+
+}
+
+// GetBamiloCatalogConfigSalesHistTable retrieves the sum of sales for each day and each SKU from BOB
+func GetBamiloCatalogConfigSalesHistTable(dbBob *sql.DB) []bamilocatalogconfig.BamiloCatalogConfig {
+
+	stmt, err := dbBob.Prepare(`
+		SELECT
+
+		cc.id_catalog_config
+		,DATE_FORMAT(soi.created_at, "%m/%d/%Y") config_snapshot_at
+
+		,COUNT(DISTINCT soi.id_sales_order_item) count_of_soi
+		,COALESCE(FLOOR(SUM(soi.paid_price))) sum_of_paid_price
+		,COALESCE(FLOOR(SUM(soi.unit_price))) sum_of_unit_price
+		,COALESCE(FLOOR(SUM(soi.coupon_money_value))) sum_of_coupon_money_value
+		,COALESCE(FLOOR(SUM(soi.cart_rule_discount))) sum_of_cart_rule_discount
 	
 		FROM sales_order_item soi
 		JOIN catalog_simple cs
@@ -155,30 +213,32 @@ func GetBamiloCatalogConfigSalesTable(dbBob *sql.DB) []bamilocatalogconfig.Bamil
 	checkError(err)
 	defer rows.Close()
 
-	var bamiloCatalogConfigSalesTable []bamilocatalogconfig.BamiloCatalogConfig
-	bamiloCatalogConfigSales := bamilocatalogconfig.BamiloCatalogConfig{}
+	var bamiloCatalogConfigSalesHistTable []bamilocatalogconfig.BamiloCatalogConfig
+	var configSnapshotAtStr string
+	bamiloCatalogConfigSalesHist := bamilocatalogconfig.BamiloCatalogConfig{}
 
 	for rows.Next() {
 
 		err := rows.Scan(
-			&bamiloCatalogConfigSales.IDBmlCatalogConfig,
-			&bamiloCatalogConfigSales.ConfigSnapshotAt,
+			&bamiloCatalogConfigSalesHist.IDBmlCatalogConfig,
+			&configSnapshotAtStr,
 
-			&bamiloCatalogConfigSales.CountOfSoi,
-			&bamiloCatalogConfigSales.SumOfPaidPrice,
-			&bamiloCatalogConfigSales.SumOfUnitPrice,
-			&bamiloCatalogConfigSales.SumOfCouponMoneyValue,
-			&bamiloCatalogConfigSales.SumOfCartRuleDiscount,
+			&bamiloCatalogConfigSalesHist.CountOfSoi,
+			&bamiloCatalogConfigSalesHist.SumOfPaidPrice,
+			&bamiloCatalogConfigSalesHist.SumOfUnitPrice,
+			&bamiloCatalogConfigSalesHist.SumOfCouponMoneyValue,
+			&bamiloCatalogConfigSalesHist.SumOfCartRuleDiscount,
 		)
 		checkError(err)
 
-		bamiloCatalogConfigSalesTable = append(bamiloCatalogConfigSalesTable, bamiloCatalogConfigSales)
+		bamiloCatalogConfigSalesHist.ConfigSnapshotAt, err = time.Parse(`01/02/2006`, configSnapshotAtStr)
+		checkError(err)
+
+		bamiloCatalogConfigSalesHistTable = append(bamiloCatalogConfigSalesHistTable, bamiloCatalogConfigSalesHist)
 
 	}
 
-	log.Println(` Length of the table: ` + strconv.Itoa(len(bamiloCatalogConfigSalesTable)))
-
-	return bamiloCatalogConfigSalesTable
+	return bamiloCatalogConfigSalesHistTable
 
 }
 

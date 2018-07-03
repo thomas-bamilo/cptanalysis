@@ -2,33 +2,28 @@ package mongointeract
 
 import (
 	"log"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/globalsign/mgo"
 	"github.com/thomas-bamilo/commercial/competitionanalysis/bamilocatalogconfig"
 )
 
-func UpsertConfigInfo(mongoSession *mgo.Session, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
+func UpsertConfigInfo(mongoSession *mgo.Session, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
 
-	bamiloCatalogConfigCollection := mongoSession.DB(`competition_analysis`).C(`bml_catalog_config`)
+	defer wg.Done()
 
-	mybulk := bamiloCatalogConfigCollection.Bulk()
-	mybulk.Unordered()
-	ops := 0
 	now := time.Now()
 
 	for _, bamiloCatalogConfig := range bamiloCatalogConfigTable {
 
-		if bamiloCatalogConfig.VisibleInShop == `1` {
-			bamiloCatalogConfig.SetVisibleInShopTrue()
-		}
-
 		// only keep appropriate information for bamilocatalogconfig
-		bamiloCatalogConfigInfo := bamilocatalogconfig.BamiloCatalogConfig{
-			IDMongoDb:          bamiloCatalogConfig.IDBmlCatalogConfig,
+		bamiloCatalogConfigInfo := bamilocatalogconfig.BamiloCatalogConfigInfo{
 			IDBmlCatalogConfig: bamiloCatalogConfig.IDBmlCatalogConfig,
 			ConfigSnapshotAt:   now,
 			SKUName:            bamiloCatalogConfig.SKUName,
+			ImgLink:            bamiloCatalogConfig.ImgLink,
 			Description:        bamiloCatalogConfig.Description,
 			ShortDescription:   bamiloCatalogConfig.ShortDescription,
 			PackageContent:     bamiloCatalogConfig.PackageContent,
@@ -52,30 +47,12 @@ func UpsertConfigInfo(mongoSession *mgo.Session, bamiloCatalogConfigTable []bami
 			MinOfStockQuantity: bamiloCatalogConfig.MinOfStockQuantity,
 		}
 
-		var data interface{}
-		data = bamiloCatalogConfigInfo
-
-		if ops > 950 {
-			// We need to run our operations before we queue up too many
-			_, err := mybulk.Run()
-			checkError(err)
-
-			// re-initialize the bulk
-			mybulk = nil
-			mybulk := bamiloCatalogConfigCollection.Bulk()
-			mybulk.Unordered()
-
-			// re-initialize ops
-			ops = 0
+		if bamiloCatalogConfig.VisibleInShop == `1` {
+			bamiloCatalogConfigInfo.SetVisibleInShopTrue()
 		}
 
-		ops++
-		mybulk.Upsert(data)
-	}
-	// Do a final run if you have any ops left
-	if ops > 0 {
-		_, err := mybulk.Run()
-		checkError(err)
+		bamiloCatalogConfigInfo.UpsertConfigInfo(mongoSession)
+
 	}
 
 	end := time.Now()
@@ -85,27 +62,22 @@ func UpsertConfigInfo(mongoSession *mgo.Session, bamiloCatalogConfigTable []bami
 
 }
 
-func UpsertConfigHistory(mongoSession *mgo.Session, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
+func UpsertConfigInfoHist(mongoSession *mgo.Session, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
 
-	bamiloCatalogConfigHistCollection := mongoSession.DB(`competition_analysis`).C(`bml_catalog_config_hist`)
+	defer wg.Done()
 
-	mybulk := bamiloCatalogConfigHistCollection.Bulk()
-	mybulk.Unordered()
-	ops := 0
-	today := time.Now().Format(`01022006`)
 	now := time.Now()
 
 	for _, bamiloCatalogConfig := range bamiloCatalogConfigTable {
-		iDMongoHist := bamiloCatalogConfig.IDBmlCatalogConfig + today
-		if bamiloCatalogConfig.VisibleInShop == `1` {
-			bamiloCatalogConfig.SetVisibleInShopTrue()
-		}
+
+		iDBmlCatalogConfigHist, err := strconv.Atoi(strconv.Itoa(bamiloCatalogConfig.IDBmlCatalogConfig) + now.Format(`01022006`))
+		checkError(err)
 
 		// only keep appropriate information for bamilocatalogconfig
-		bamiloCatalogConfigHist := bamilocatalogconfig.BamiloCatalogConfig{
-			IDMongoDb:          iDMongoHist,
-			FKBmlCatalogConfig: bamiloCatalogConfig.IDBmlCatalogConfig,
-			ConfigSnapshotAt:   now,
+		bamiloCatalogConfigInfoHist := bamilocatalogconfig.BamiloCatalogConfigInfoHist{
+			IDBmlCatalogConfigHist: iDBmlCatalogConfigHist,
+			FKBmlCatalogConfig:     bamiloCatalogConfig.IDBmlCatalogConfig,
+			ConfigSnapshotAt:       now,
 
 			VisibleInShopBool:  bamiloCatalogConfig.VisibleInShopBool,
 			AvgPrice:           bamiloCatalogConfig.AvgPrice,
@@ -114,36 +86,81 @@ func UpsertConfigHistory(mongoSession *mgo.Session, bamiloCatalogConfigTable []b
 			MinOfStockQuantity: bamiloCatalogConfig.MinOfStockQuantity,
 		}
 
-		var data interface{}
-		data = bamiloCatalogConfigHist
-
-		if ops > 950 {
-			// We need to run our operations before we queue up too many
-			_, err := mybulk.Run()
-			checkError(err)
-
-			// re-initialize the bulk
-			mybulk = nil
-			mybulk := bamiloCatalogConfigHistCollection.Bulk()
-			mybulk.Unordered()
-
-			// re-initialize ops
-			ops = 0
+		if bamiloCatalogConfig.VisibleInShop == `1` {
+			bamiloCatalogConfigInfoHist.SetVisibleInShopTrue()
 		}
 
-		ops++
-		mybulk.Upsert(data)
-	}
-	// Do a final run if you have any ops left
-	if ops > 0 {
-		_, err := mybulk.Run()
-		checkError(err)
+		bamiloCatalogConfigInfoHist.UpsertConfigInfoHist(mongoSession)
+
 	}
 
 	end := time.Now()
-	log.Println(`End time config info Mongo: ` + end.Format(`1 January 2006, 15:04:05`))
+	log.Println(`End time config hist Mongo: ` + end.Format(`1 January 2006, 15:04:05`))
 	duration := time.Since(start)
-	log.Print(`Time elapsed config info Mongo: `, duration.Minutes(), ` minutes`)
+	log.Print(`Time elapsed config hist Mongo: `, duration.Minutes(), ` minutes`)
+
+}
+
+// sales ------------------------------------------------------------------------------
+
+func UpsertConfigSales(mongoSession *mgo.Session, bamiloCatalogConfigSalesTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	now := time.Now()
+
+	for _, bamiloCatalogConfigSales := range bamiloCatalogConfigSalesTable {
+
+		// only keep appropriate information for bamilocatalogconfig
+		bamiloCatalogConfigSales := bamilocatalogconfig.BamiloCatalogConfigSales{
+			IDBmlCatalogConfig: bamiloCatalogConfigSales.IDBmlCatalogConfig,
+			ConfigSnapshotAt:   now,
+
+			CountOfSoi:            bamiloCatalogConfigSales.CountOfSoi,
+			SumOfUnitPrice:        bamiloCatalogConfigSales.SumOfUnitPrice,
+			SumOfPaidPrice:        bamiloCatalogConfigSales.SumOfPaidPrice,
+			SumOfCouponMoneyValue: bamiloCatalogConfigSales.SumOfCouponMoneyValue,
+			SumOfCartRuleDiscount: bamiloCatalogConfigSales.SumOfCartRuleDiscount,
+		}
+
+		bamiloCatalogConfigSales.UpsertConfigSales(mongoSession)
+
+	}
+
+	end := time.Now()
+	log.Println(`End time config sales Mongo: ` + end.Format(`1 January 2006, 15:04:05`))
+	duration := time.Since(start)
+	log.Print(`Time elapsed config sales Mongo: `, duration.Minutes(), ` minutes`)
+
+}
+
+func UpsertConfigSalesHist(mongoSession *mgo.Session, bamiloCatalogConfigSalesHistTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	for _, bamiloCatalogConfigSalesHist := range bamiloCatalogConfigSalesHistTable {
+
+		iDBmlCatalogConfigHist, err := strconv.Atoi(strconv.Itoa(bamiloCatalogConfigSalesHist.IDBmlCatalogConfig) + bamiloCatalogConfigSalesHist.ConfigSnapshotAt.Format(`01022006`))
+		checkError(err)
+		// only keep appropriate information for bamilocatalogconfig
+		bamiloCatalogConfigSalesHist := bamilocatalogconfig.BamiloCatalogConfigSalesHist{
+			IDBmlCatalogConfigHist: iDBmlCatalogConfigHist,
+			FKBmlCatalogConfig:     bamiloCatalogConfigSalesHist.IDBmlCatalogConfig,
+			ConfigSnapshotAt:       bamiloCatalogConfigSalesHist.ConfigSnapshotAt,
+
+			CountOfSoi:            bamiloCatalogConfigSalesHist.CountOfSoi,
+			SumOfUnitPrice:        bamiloCatalogConfigSalesHist.SumOfUnitPrice,
+			SumOfPaidPrice:        bamiloCatalogConfigSalesHist.SumOfPaidPrice,
+			SumOfCouponMoneyValue: bamiloCatalogConfigSalesHist.SumOfCouponMoneyValue,
+			SumOfCartRuleDiscount: bamiloCatalogConfigSalesHist.SumOfCartRuleDiscount,
+		}
+		bamiloCatalogConfigSalesHist.UpsertConfigSalesHist(mongoSession)
+
+	}
+	end := time.Now()
+	log.Println(`End time config sales Mongo: ` + end.Format(`1 January 2006, 15:04:05`))
+	duration := time.Since(start)
+	log.Print(`Time elapsed config sales Mongo: `, duration.Minutes(), ` minutes`)
 
 }
 

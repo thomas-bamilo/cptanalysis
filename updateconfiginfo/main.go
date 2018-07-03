@@ -28,28 +28,28 @@ func main() {
 	mongoSession, err := mgo.Dial(url)
 	checkError(err)
 	defer mongoSession.Close()
+	mongoSession2 := mongoSession.Copy()
+	defer mongoSession2.Close()
 
 	elasticClient, err := elastic.NewClient(elastic.SetURL("http://localhost:9200"))
 	checkError(err)
 	ctx := context.Background()
 
-	// wg allows the program to wait for both goroutines to execute before ending
+	// wg allows the program to wait for goroutines to execute before ending
 	// otherwise, the program will end before any goroutine can finish!
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 
-	go mongointeract.UpsertConfigInfo(mongoSession, bamiloCatalogConfigTable, start)
-
-	go mongointeract.UpsertConfigHistory(mongoSession, bamiloCatalogConfigTable, start)
-
-	go elasticinteract.UpsertConfigInfo(elasticClient, ctx, bamiloCatalogConfigTable, start)
+	// mongo
+	go mongointeract.UpsertConfigInfo(mongoSession, bamiloCatalogConfigTable, start, &wg)
+	go mongointeract.UpsertConfigInfoHist(mongoSession2, bamiloCatalogConfigTable, start, &wg)
+	// elastic
 
 	wg.Wait()
 
-	end := time.Now()
-	log.Println(`End time: ` + end.Format(`1 January 2006, 15:04:05`))
-	duration := time.Since(start)
-	log.Print(`Time elapsed: `, duration.Minutes(), ` minutes`)
+	wg.Add(1)
+	go elasticinteract.UpsertConfigInfo(elasticClient, ctx, bamiloCatalogConfigTable, start, &wg)
+	wg.Wait()
 
 }
 

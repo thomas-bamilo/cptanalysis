@@ -4,23 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/thomas-bamilo/commercial/competitionanalysis/bamilocatalogconfig"
 	"gopkg.in/olivere/elastic.v5"
 )
 
-func UpsertConfigInfo(elasticClient *elastic.Client, ctx context.Context, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time) {
+func UpsertConfigInfo(elasticClient *elastic.Client, ctx context.Context, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
+
+	defer wg.Done()
 
 	for _, bamiloCatalogConfig := range bamiloCatalogConfigTable {
 		// only keep appropriate information for elastic
-		bamiloCatalogConfigElastic := bamilocatalogconfig.BamiloCatalogConfig{
-			IDBmlCatalogConfig: bamiloCatalogConfig.IDBmlCatalogConfig,
-			SKUName:            bamiloCatalogConfig.SKUName,
-			Description:        bamiloCatalogConfig.Description,
-			ShortDescription:   bamiloCatalogConfig.ShortDescription,
-			PackageContent:     bamiloCatalogConfig.PackageContent,
-			ProductWarranty:    bamiloCatalogConfig.ProductWarranty,
+		bamiloCatalogConfigElastic := bamilocatalogconfig.BamiloCatalogConfigElastic{
+			//IDBmlCatalogConfig: bamiloCatalogConfig.IDBmlCatalogConfig,
+			SKUName:          bamiloCatalogConfig.SKUName,
+			Description:      bamiloCatalogConfig.Description,
+			ShortDescription: bamiloCatalogConfig.ShortDescription,
+			PackageContent:   bamiloCatalogConfig.PackageContent,
+			ProductWarranty:  bamiloCatalogConfig.ProductWarranty,
 
 			BiCategoryOneName:   bamiloCatalogConfig.BiCategoryOneName,
 			BiCategoryTwoName:   bamiloCatalogConfig.BiCategoryTwoName,
@@ -45,7 +49,7 @@ func UpsertConfigInfo(elasticClient *elastic.Client, ctx context.Context, bamilo
 		_, err = elasticClient.Index().
 			Index(`bamilo_catalog_config`).
 			Type(`bamilo_catalog_config`).
-			Id(bamiloCatalogConfig.IDBmlCatalogConfig).
+			Id(strconv.Itoa(bamiloCatalogConfig.IDBmlCatalogConfig)).
 			BodyJson(bamiloCatalogConfigElasticJSON).
 			Do(ctx)
 

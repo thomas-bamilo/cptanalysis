@@ -2,12 +2,13 @@ package main
 
 import (
 	"log"
+	"sync"
 	"time"
 
-	"github.com/thomas-bamilo/sql/connectdb"
-
-	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/baainteract"
+	"github.com/globalsign/mgo"
 	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/bobinteract"
+	"github.com/thomas-bamilo/commercial/competitionanalysis/dbinteract/mongointeract"
+	"github.com/thomas-bamilo/sql/connectdb"
 )
 
 func main() {
@@ -18,15 +19,22 @@ func main() {
 	dbBob := connectdb.ConnectToBob()
 	defer dbBob.Close()
 	bamiloCatalogConfigSalesTable := bobinteract.GetBamiloCatalogConfigSalesTable(dbBob)
+	bamiloCatalogConfigSalesHistTable := bobinteract.GetBamiloCatalogConfigSalesHistTable(dbBob)
 
-	dbBaa := connectdb.ConnectToBaa()
-	defer dbBaa.Close()
-	baainteract.UpdateBamiloCatalogConfigSales(dbBaa, bamiloCatalogConfigSalesTable)
+	var url = `mongodb://localhost:27017/competition_analysis`
+	mongoSession, err := mgo.Dial(url)
+	checkError(err)
+	defer mongoSession.Close()
 
-	end := time.Now()
-	log.Println(`End time: ` + end.Format(`1 January 2006, 15:04:05`))
-	duration := time.Since(start)
-	log.Print(`Time elapsed: `, duration.Minutes(), ` minutes`)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	//wg.Done() inside each function
+
+	// mongo
+	go mongointeract.UpsertConfigSales(mongoSession, bamiloCatalogConfigSalesTable, start, &wg)
+	go mongointeract.UpsertConfigSalesHist(mongoSession, bamiloCatalogConfigSalesHistTable, start, &wg)
+
+	wg.Wait()
 
 }
 
