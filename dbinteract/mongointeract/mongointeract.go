@@ -8,6 +8,7 @@ import (
 
 	"github.com/globalsign/mgo"
 	"github.com/thomas-bamilo/commercial/competitionanalysis/bamilocatalogconfig"
+	"github.com/thomas-bamilo/nosql/mongobulk"
 )
 
 func UpsertConfigInfo(mongoSession *mgo.Session, bamiloCatalogConfigTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
@@ -109,6 +110,12 @@ func UpsertConfigSales(mongoSession *mgo.Session, bamiloCatalogConfigSalesTable 
 
 	now := time.Now()
 
+	c := mongoSession.DB("competition_analysis").C("bml_catalog_config")
+
+	config := mongobulk.Config{OpsPerBatch: 950}
+
+	mongoBulk := mongobulk.New(c, config)
+
 	for _, bamiloCatalogConfigSales := range bamiloCatalogConfigSalesTable {
 
 		// only keep appropriate information for bamilocatalogconfig
@@ -123,7 +130,7 @@ func UpsertConfigSales(mongoSession *mgo.Session, bamiloCatalogConfigSalesTable 
 			SumOfCartRuleDiscount: bamiloCatalogConfigSales.SumOfCartRuleDiscount,
 		}
 
-		bamiloCatalogConfigSales.UpsertConfigSales(mongoSession)
+		bamiloCatalogConfigSales.UpsertConfigSales(mongoBulk)
 
 	}
 
@@ -132,11 +139,20 @@ func UpsertConfigSales(mongoSession *mgo.Session, bamiloCatalogConfigSalesTable 
 	duration := time.Since(start)
 	log.Print(`Time elapsed config sales Mongo: `, duration.Minutes(), ` minutes`)
 
+	err := mongoBulk.Finish()
+	checkError(err)
+
 }
 
 func UpsertConfigSalesHist(mongoSession *mgo.Session, bamiloCatalogConfigSalesHistTable []bamilocatalogconfig.BamiloCatalogConfig, start time.Time, wg *sync.WaitGroup) {
 
 	defer wg.Done()
+
+	c := mongoSession.DB("competition_analysis").C("bml_catalog_config_hist")
+
+	config := mongobulk.Config{OpsPerBatch: 950}
+
+	mongoBulk := mongobulk.New(c, config)
 
 	for _, bamiloCatalogConfigSalesHist := range bamiloCatalogConfigSalesHistTable {
 
@@ -154,13 +170,17 @@ func UpsertConfigSalesHist(mongoSession *mgo.Session, bamiloCatalogConfigSalesHi
 			SumOfCouponMoneyValue: bamiloCatalogConfigSalesHist.SumOfCouponMoneyValue,
 			SumOfCartRuleDiscount: bamiloCatalogConfigSalesHist.SumOfCartRuleDiscount,
 		}
-		bamiloCatalogConfigSalesHist.UpsertConfigSalesHist(mongoSession)
+
+		bamiloCatalogConfigSalesHist.UpsertConfigSalesHist(mongoBulk)
 
 	}
 	end := time.Now()
 	log.Println(`End time config sales Mongo: ` + end.Format(`1 January 2006, 15:04:05`))
 	duration := time.Since(start)
 	log.Print(`Time elapsed config sales Mongo: `, duration.Minutes(), ` minutes`)
+
+	err := mongoBulk.Finish()
+	checkError(err)
 
 }
 

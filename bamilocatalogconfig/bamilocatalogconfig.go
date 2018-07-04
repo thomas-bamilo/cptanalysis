@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
+	"github.com/thomas-bamilo/nosql/mongobulk"
 )
 
 type BamiloCatalogConfig struct {
@@ -50,12 +52,13 @@ type BamiloCatalogConfig struct {
 
 type BamiloCatalogConfigElastic struct {
 	// qualitative information
-	SKUName          string `json:"sku_name"`
-	ImgLink          string `json:"img_link"`
-	Description      string `json:"description"`
-	ShortDescription string `json:"short_description"`
-	PackageContent   string `json:"package_content"`
-	ProductWarranty  string `json:"product_warranty"`
+	IDBmlCatalogConfig int    `json:"id_bml_catalog_config"`
+	SKUName            string `json:"sku_name"`
+	ImgLink            string `json:"img_link"`
+	Description        string `json:"description"`
+	ShortDescription   string `json:"short_description"`
+	PackageContent     string `json:"package_content"`
+	ProductWarranty    string `json:"product_warranty"`
 	// category
 	BiCategoryOneName   string `json:"bi_category_one_name"`
 	BiCategoryTwoName   string `json:"bi_category_two_name"`
@@ -170,17 +173,31 @@ type BamiloCatalogConfigSales struct {
 	SumOfCartRuleDiscount int `json:"sum_of_cart_rule_discount" bson:"sum_of_cart_rule_discount"`
 }
 
-func (bamiloCatalogConfigSales *BamiloCatalogConfigSales) UpsertConfigSales(session *mgo.Session) {
+func (bamiloCatalogConfigSales *BamiloCatalogConfigSales) UpsertConfigSales(mongoBulk *mongobulk.Bulk) {
 
 	// Optional. Switch the session to a monotonic behavior.
-	session.SetMode(mgo.Monotonic, true)
+	//session.SetMode(mgo.Monotonic, true)
 
-	c := session.DB("competition_analysis").C("bml_catalog_config")
-	_, err := c.UpsertId(bamiloCatalogConfigSales.IDBmlCatalogConfig, bamiloCatalogConfigSales)
+	bamiloCatalogConfigSalesByte, err := bson.Marshal(bamiloCatalogConfigSales)
 	if err != nil {
-		log.Println("Error creating Profile: ", err.Error())
+		log.Println("Error marshaling: ", err.Error())
 
 	}
+	bamiloCatalogConfigSalesBson := make(map[string]interface{})
+	err = bson.Unmarshal(bamiloCatalogConfigSalesByte, bamiloCatalogConfigSalesBson)
+	if err != nil {
+		log.Println("Error unmarshaling: ", err.Error())
+
+	}
+	colQuerier := bson.M{"id_bml_catalog_config": bamiloCatalogConfigSales.IDBmlCatalogConfig}
+
+	mongoBulk.Upsert(colQuerier, bson.M{"$set": bamiloCatalogConfigSalesBson})
+	//c := session.DB("competition_analysis").C("bml_catalog_config")
+	//_, err = c.Upsert(colQuerier, bson.M{"$set": bamiloCatalogConfigSalesBson})
+	//if err != nil {
+	//	log.Println("Error creating Profile: ", err.Error())
+
+	//}
 
 }
 
@@ -197,16 +214,21 @@ type BamiloCatalogConfigSalesHist struct {
 	SumOfCartRuleDiscount int `json:"sum_of_cart_rule_discount" bson:"sum_of_cart_rule_discount"`
 }
 
-func (bamiloCatalogConfigSalesHist *BamiloCatalogConfigSalesHist) UpsertConfigSalesHist(session *mgo.Session) {
+func (bamiloCatalogConfigSalesHist *BamiloCatalogConfigSalesHist) UpsertConfigSalesHist(mongoBulk *mongobulk.Bulk) {
 
-	// Optional. Switch the session to a monotonic behavior.
-	session.SetMode(mgo.Monotonic, true)
-
-	c := session.DB("competition_analysis").C("bml_catalog_config_hist")
-	_, err := c.UpsertId(bamiloCatalogConfigSalesHist.IDBmlCatalogConfigHist, bamiloCatalogConfigSalesHist)
+	bamiloCatalogConfigSalesHistByte, err := bson.Marshal(bamiloCatalogConfigSalesHist)
 	if err != nil {
-		log.Println("Error creating Profile: ", err.Error())
+		log.Println("Error marshaling: ", err.Error())
 
 	}
+	bamiloCatalogConfigSalesHistBson := make(map[string]interface{})
+	err = bson.Unmarshal(bamiloCatalogConfigSalesHistByte, bamiloCatalogConfigSalesHistBson)
+	if err != nil {
+		log.Println("Error unmarshaling: ", err.Error())
+
+	}
+	colQuerier := bson.M{"id_bml_catalog_config_hist": bamiloCatalogConfigSalesHist.IDBmlCatalogConfigHist}
+
+	mongoBulk.Upsert(colQuerier, bson.M{"$set": bamiloCatalogConfigSalesHistBson})
 
 }

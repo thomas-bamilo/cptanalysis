@@ -26,11 +26,15 @@ func main() {
 	checkError(err)
 	defer mongoSession.Close()
 
+	// Optional. Switch the session to a monotonic behavior.
+	mongoSession.SetMode(mgo.Monotonic, true)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	//wg.Done() inside each function
 
 	// mongo
+	// only run once per day
 	go mongointeract.UpsertConfigSales(mongoSession, bamiloCatalogConfigSalesTable, start, &wg)
 	go mongointeract.UpsertConfigSalesHist(mongoSession, bamiloCatalogConfigSalesHistTable, start, &wg)
 

@@ -38,17 +38,16 @@ func main() {
 	// wg allows the program to wait for goroutines to execute before ending
 	// otherwise, the program will end before any goroutine can finish!
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 
 	// mongo
+	// snapshot run twice per day
 	go mongointeract.UpsertConfigInfo(mongoSession, bamiloCatalogConfigTable, start, &wg)
+	// history only run once per day
 	go mongointeract.UpsertConfigInfoHist(mongoSession2, bamiloCatalogConfigTable, start, &wg)
 	// elastic
-
-	wg.Wait()
-
-	wg.Add(1)
 	go elasticinteract.UpsertConfigInfo(elasticClient, ctx, bamiloCatalogConfigTable, start, &wg)
+
 	wg.Wait()
 
 }
